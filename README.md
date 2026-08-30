@@ -1,57 +1,60 @@
 # Hello World
 
-A simple React app served through an nginx reverse proxy, run with Docker Compose. TLS is issued by Let’s Encrypt.
+A simple React app served through an nginx reverse proxy. Public HTTPS is provided by a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (no public IP or Let’s Encrypt required).
 
 ## Requirements
 
 - [Docker](https://docs.docker.com/get-docker/) with Docker Compose
-- DNS A records for `olama.so` and `www.olama.so` pointing at the VPS **public** IP
-- Ports **80** and **443** open on the host firewall
+- A free [Cloudflare](https://dash.cloudflare.com) account
+- Domain `olama.so` using Cloudflare nameservers
 
-## Run with Docker
-
-From the project root:
+## Run locally (no tunnel)
 
 ```bash
 docker compose up -d --build
 ```
 
-nginx listens on ports **80** and **443** and proxies to the React frontend. Until a real certificate is issued, it uses a temporary self-signed cert.
+Open [http://localhost](http://localhost). nginx listens on port **80** and proxies to the React frontend.
 
-Stop the stack:
+Stop:
 
 ```bash
 docker compose down
 ```
 
-## Let’s Encrypt TLS
+## Cloudflare Tunnel (https://olama.so)
 
-1. Confirm the site answers on HTTP (needed for the ACME challenge):
+1. Add `olama.so` to Cloudflare and point Namecheap nameservers at the two Cloudflare NS records. Wait until the zone is **Active**.
+
+2. Zero Trust → Networks → Tunnels → Create a **Cloudflared** tunnel. Copy the token.
+
+3. In the tunnel, add Public Hostnames:
+
+   | Subdomain | Domain   | Type | URL              |
+   |-----------|----------|------|------------------|
+   | *(empty)* | olama.so | HTTP | `http://nginx:80` |
+   | www       | olama.so | HTTP | `http://nginx:80` |
+
+4. SSL/TLS → Overview → **Full**. Optional: Edge Certificates → Always Use HTTPS.
+
+5. On the host:
 
    ```bash
-   curl -I http://olama.so
+   cp .env.example .env
    ```
 
-2. Issue the certificate (set `EMAIL` to a real address):
+   Put the tunnel token in `.env` as `TUNNEL_TOKEN=...` (keep `COMPOSE_PROFILES=cloudflare`).
+
+6. Start the stack:
 
    ```bash
-   chmod +x init-letsencrypt.sh
-   EMAIL=you@olama.so ./init-letsencrypt.sh
+   docker compose up -d --build
+   docker compose logs -f cloudflared
    ```
 
-   If `www.olama.so` has no DNS record, remove it from `domains` in `init-letsencrypt.sh` first.
+   Connector logs should show the tunnel is connected. Then open [https://olama.so](https://olama.so).
 
-3. Open [https://olama.so](https://olama.so).
-
-To re-issue, run `FORCE=1 EMAIL=you@olama.so ./init-letsencrypt.sh`.
-
-### Renewal
-
-Certificates last 90 days. Add a cron job on the VPS:
-
-```bash
-0 3 * * * cd /apps/boiler-plate && docker compose run --rm --no-deps certbot renew && docker compose exec nginx nginx -s reload
-```
+Cloudflare terminates HTTPS. The tunnel reaches nginx over HTTP on the Docker network (`http://nginx:80`). Do not point DNS at a Tailscale or CGNAT address.
 
 ## Local development (without Docker)
 
@@ -66,11 +69,10 @@ The Vite dev server runs at [http://localhost:3000](http://localhost:3000).
 ## Project layout
 
 ```
-├── docker-compose.yml    # frontend, nginx, certbot
-├── init-letsencrypt.sh   # issue / replace Let’s Encrypt certs
-├── certbot/              # certificates and ACME webroot (not committed)
+├── docker-compose.yml    # frontend, nginx, cloudflared
+├── .env.example          # TUNNEL_TOKEN (copy to .env)
 ├── frontend/             # Vite + React app
 │   └── Dockerfile
 └── nginx/
-    └── nginx.conf        # HTTP→HTTPS, ACME challenge, reverse proxy
+    └── nginx.conf        # reverse proxy to frontend:3000
 ```
