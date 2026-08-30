@@ -1,3 +1,6 @@
 node_modules
 dist
 .DS_Store
+certbot/conf
+certbot/www/*
+!certbot/www/.gitkeep
