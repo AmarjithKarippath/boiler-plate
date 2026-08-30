@@ -14,9 +14,9 @@ From the project root:
 docker compose up --build
 ```
 
-Then open [http://localhost:8080](http://localhost:8080).
+Then open [http://olama.so](http://olama.so) (or [http://localhost](http://localhost) on this machine).
 
-nginx listens on port **8080** and proxies requests to the React frontend container.
+nginx listens on port **80** and proxies requests to the React frontend container. Point the domain’s A record at the VPS public IP.
 
 Stop the stack:
 
