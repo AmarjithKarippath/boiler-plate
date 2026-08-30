@@ -1,6 +1,6 @@
 # Hello World
 
-A simple React app served through an nginx reverse proxy. Public HTTPS is provided by a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) (no public IP or Let’s Encrypt required).
+A simple React app served through an nginx reverse proxy. Public HTTPS is provided by a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) run separately (no public IP or Let’s Encrypt required).
 
 ## Requirements
 
@@ -8,7 +8,7 @@ A simple React app served through an nginx reverse proxy. Public HTTPS is provid
 - A free [Cloudflare](https://dash.cloudflare.com) account
 - Domain `olama.so` using Cloudflare nameservers
 
-## Run locally (no tunnel)
+## Run the app
 
 ```bash
 docker compose up -d --build
@@ -28,33 +28,27 @@ docker compose down
 
 2. Zero Trust → Networks → Tunnels → Create a **Cloudflared** tunnel. Copy the token.
 
-3. In the tunnel, add Public Hostnames:
+3. In the tunnel, add Public Hostnames. Because `cloudflared` runs **outside** this Compose file, the origin is the host, not the `nginx` service name:
 
-   | Subdomain | Domain   | Type | URL              |
-   |-----------|----------|------|------------------|
-   | *(empty)* | olama.so | HTTP | `http://nginx:80` |
-   | www       | olama.so | HTTP | `http://nginx:80` |
+   | Subdomain | Domain   | Type | URL                 |
+   |-----------|----------|------|---------------------|
+   | *(empty)* | olama.so | HTTP | `http://127.0.0.1:80` |
+   | www       | olama.so | HTTP | `http://127.0.0.1:80` |
 
 4. SSL/TLS → Overview → **Full**. Optional: Edge Certificates → Always Use HTTPS.
 
-5. On the host:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-   Put the tunnel token in `.env` as `TUNNEL_TOKEN=...` (keep `COMPOSE_PROFILES=cloudflare`).
-
-6. Start the stack:
+5. Start the app with Compose, then start the tunnel on the host (`--network host` so `127.0.0.1:80` is nginx on this machine):
 
    ```bash
    docker compose up -d --build
-   docker compose logs -f cloudflared
+
+   sudo docker run -d --name cloudflared --restart unless-stopped --network host \
+     cloudflare/cloudflared:latest tunnel --no-autoupdate run --token YOUR_TOKEN
    ```
 
-   Connector logs should show the tunnel is connected. Then open [https://olama.so](https://olama.so).
+   Connector logs (`docker logs -f cloudflared`) should show the tunnel is connected. Then open [https://olama.so](https://olama.so).
 
-Cloudflare terminates HTTPS. The tunnel reaches nginx over HTTP on the Docker network (`http://nginx:80`). Do not point DNS at a Tailscale or CGNAT address.
+Do not commit the tunnel token. Do not point DNS at a Tailscale or CGNAT address.
 
 ## Local development (without Docker)
 
@@ -69,8 +63,7 @@ The Vite dev server runs at [http://localhost:3000](http://localhost:3000).
 ## Project layout
 
 ```
-├── docker-compose.yml    # frontend, nginx, cloudflared
-├── .env.example          # TUNNEL_TOKEN (copy to .env)
+├── docker-compose.yml    # frontend + nginx
 ├── frontend/             # Vite + React app
 │   └── Dockerfile
 └── nginx/
